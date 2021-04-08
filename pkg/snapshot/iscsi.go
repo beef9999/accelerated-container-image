@@ -59,6 +59,7 @@ type OverlayBDBSConfig struct {
 	Lowers      []OverlayBDBSConfigLower `json:"lowers"`
 	Upper       OverlayBDBSConfigUpper   `json:"upper"`
 	ResultFile  string                   `json:"resultFile"`
+	ImageDigest string                   `json:"imageDigest,omitempty"`
 }
 
 // OverlayBDBSConfigLower
@@ -231,7 +232,7 @@ func (o *snapshotter) attachAndMountBlockDevice(ctx context.Context, snID string
 }
 
 // constructOverlayBDSpec generates the config spec for OverlayBD backing store.
-func (o *snapshotter) constructOverlayBDSpec(ctx context.Context, key string, writable bool) error {
+func (o *snapshotter) constructOverlayBDSpec(ctx context.Context, key string, writable bool, imageDigest string) error {
 	id, info, _, err := storage.GetInfo(ctx, key)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get info for snapshot %s", key)
@@ -245,6 +246,7 @@ func (o *snapshotter) constructOverlayBDSpec(ctx context.Context, key string, wr
 	configJSON := OverlayBDBSConfig{
 		Lowers:     []OverlayBDBSConfigLower{},
 		ResultFile: o.tgtOverlayBDInitDebuglogPath(id),
+		ImageDigest: imageDigest,
 	}
 
 	// load the parent's config and reuse the lowerdir
