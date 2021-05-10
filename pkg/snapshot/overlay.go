@@ -79,6 +79,9 @@ const (
 	// TODO(fuweid): Is it possible to use it in upstream?
 	labelKeyImageRef = "containerd.io/snapshot/image-ref"
 
+	// labelKeyImageDigest represents image digest
+	labelKeyImageDigest = "containerd.io/snapshot/image-digest"
+
 	// labelKeyOverlayBDBlobDigest is the annotation key in the manifest to
 	// describe the digest of blob in OverlayBD format.
 	//
@@ -352,9 +355,18 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 				}
 			}
 
-			if err := o.attachAndMountBlockDevice(ctx, obdID, obdName, writableBD); err != nil {
-				return nil, errors.Wrapf(err, "failed to attach and mount for snapshot %v", key)
+			imageDigest := parentInfo.Labels[labelKeyImageDigest]
+			if imageDigest == "" {
+				return nil, fmt.Errorf("%s is empty", labelKeyImageDigest)
 			}
+
+			if err := o.mountEBSDevice(parentID, imageDigest); err != nil {
+				return nil, errors.Wrapf(err, "failed to mount ebs device for image %s", imageDigest)
+			}
+
+			//if err := o.attachAndMountBlockDevice(ctx, obdID, obdName, writableBD); err != nil {
+			//	return nil, errors.Wrapf(err, "failed to attach and mount for snapshot %v", key)
+			//}
 
 			defer func() {
 				if retErr != nil && writableBD {

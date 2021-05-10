@@ -97,7 +97,15 @@ func rpull(ctx context.Context, client *containerd.Client, ref string, sn string
 		return nil, nil
 	})
 
-	snLabels := map[string]string{"containerd.io/snapshot/image-ref": ref}
+	_, desc, err := config.Resolver.Resolve(ctx, ref)
+	if err != nil {
+		return fmt.Errorf("resolve failed: %v", err)
+	}
+
+	snLabels := map[string]string{
+		"containerd.io/snapshot/image-ref": ref,
+		"containerd.io/snapshot/image-digest": desc.Digest.String(),
+	}
 
 	labels := commands.LabelArgs(config.Labels)
 
@@ -117,7 +125,7 @@ func rpull(ctx context.Context, client *containerd.Client, ref string, sn string
 		}
 	}
 
-	_, err := client.Pull(pctx, ref, opts...)
+	_, err = client.Pull(pctx, ref, opts...)
 	stopProgress()
 	return err
 

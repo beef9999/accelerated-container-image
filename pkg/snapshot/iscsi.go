@@ -54,6 +54,8 @@ const (
 	// param used to restrict tcmu devices mmap memory size for iSCSI data.
 	// it is worked by setting max_data_area_mb for devices in configfs.
 	obdMaxDataAreaMB = 4
+
+	ebsDeviceMappingFile = "/etc/eci-agent/dadi/mapping.json"
 )
 
 // OverlayBDBSConfig is the config of overlaybd target.
@@ -117,6 +119,44 @@ func (o *snapshotter) unmountAndDetachBlockDevice(ctx context.Context, snID stri
 	if err != nil {
 		return errors.Wrapf(err, "failed to remove target dir %s", targetPath)
 	}
+	return nil
+}
+
+func (o *snapshotter) mountEBSDevice(snID, imageDigest string) error {
+	data, err := ioutil.ReadFile(ebsDeviceMappingFile)
+	if err != nil {
+		return nil
+	}
+	mapping := make(map[string]string)
+	if err = json.Unmarshal(data, &mapping); err != nil {
+		return err
+	}
+
+	var realDevice = ""
+	for imageRef, device := range mapping {
+		sp := strings.Split(imageRef, "@")
+		if len(sp) != 2 {
+			return errors.New("invalid ebs mapping file")
+		}
+		if sp[1] == imageDigest {
+			relativePath, err := os.Readlink(device)
+			if err != nil {
+				return err
+			}
+			realDevice = filepath.Join(filepath.Dir(device), relativePath)
+			break
+		}
+	}
+	if realDevice == "" {
+		return errors.New("ebs device mapping not found")
+	}
+
+	var mountPoint = o.overlaybdMountpoint(snID)
+	var flags uintptr = unix.MS_RDONLY
+	if err = unix.Mount(realDevice, mountPoint, "ext4", flags, ""); err != nil {
+		return err
+	}
+
 	return nil
 }
 
