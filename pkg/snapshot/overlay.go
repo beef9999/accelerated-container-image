@@ -347,34 +347,37 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 		switch stype {
 		case storageTypeLocalBlock, storageTypeRemoteBlock:
 			obdID, obdName := parentID, parentInfo.Name
+
 			if writableBD {
 				obdID, obdName = id, key
-
 				if err := o.constructOverlayBDSpec(ctx, obdName, writableBD); err != nil {
 					return nil, err
 				}
-			}
 
-			imageDigest := parentInfo.Labels[labelKeyImageDigest]
-			if imageDigest == "" {
-				return nil, fmt.Errorf("%s is empty", labelKeyImageDigest)
-			}
-
-			if err := o.mountEBSDevice(parentID, imageDigest); err != nil {
-				return nil, errors.Wrapf(err, "failed to mount ebs device for image %s", imageDigest)
-			}
-
-			//if err := o.attachAndMountBlockDevice(ctx, obdID, obdName, writableBD); err != nil {
-			//	return nil, errors.Wrapf(err, "failed to attach and mount for snapshot %v", key)
-			//}
-
-			defer func() {
-				if retErr != nil && writableBD {
-					if rerr := mount.Unmount(o.overlaybdMountpoint(obdID), 0); rerr != nil {
-						log.G(ctx).WithError(rerr).Warnf("failed to umount writable block %s", o.overlaybdMountpoint(obdID))
-					}
+				if err := o.attachAndMountBlockDevice(ctx, obdID, obdName, writableBD); err != nil {
+					return nil, errors.Wrapf(err, "failed to attach and mount for snapshot %v", key)
 				}
-			}()
+
+				defer func() {
+					if retErr != nil && writableBD {
+						if rerr := mount.Unmount(o.overlaybdMountpoint(obdID), 0); rerr != nil {
+							log.G(ctx).WithError(rerr).Warnf("failed to umount writable block %s", o.overlaybdMountpoint(obdID))
+						}
+					}
+				}()
+
+			} else {
+				// For EBS, prepare Read-Only mount for image
+				imageDigest := parentInfo.Labels[labelKeyImageDigest]
+				if imageDigest == "" {
+					return nil, errors.Errorf("%s is empty", labelKeyImageDigest)
+				}
+
+				if err := o.mountEBSDevice(obdID, imageDigest); err != nil {
+					return nil, errors.Wrapf(err, "failed to mount ebs device for image %s", imageDigest)
+				}
+			}
+
 		default:
 			// do nothing
 		}
